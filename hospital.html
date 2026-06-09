@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>시니어 친화형 병원 키오스크 - 태블릿 개선본</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/hangul-js" type="text/javascript"></script>
+    <style>
+        /* 슬라이드 2단계 이후 상단 진행 상황 화살표 디자인을 위한 커스텀 스타일 */
+        .step-arrow {
+            position: relative;
+            background: #D1D5DB;
+            color: #4B5563;
+        }
+        .step-arrow::after {
+            content: '';
+            position: absolute;
+            right: -12px;
+            top: 0;
+            width: 0;
+            height: 0;
+            border-top: 18px solid transparent;
+            border-bottom: 18px solid transparent;
+            border-left: 12px solid #D1D5DB;
+            z-index: 10;
+        }
+        .step-arrow::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 0;
+            height: 0;
+            border-top: 18px solid transparent;
+            border-bottom: 18px solid transparent;
+            border-left: 12px solid #FFF;
+            z-index: 5;
+        }
+        .step-arrow:first-child::before {
+            display: none;
+        }
+        .step-arrow:last-child::after {
+            display: none;
+        }
+        
+        /* 활성화 상태 (하늘색) */
+        .step-arrow.active {
+            background: #5EEAD4; /* teal-300 */
+            color: #0F172A; /* slate-900 */
+        }
+        .step-arrow.active::after {
+            border-left-color: #5EEAD4;
+        }
+
+        /* 펄스 애니메이션 (도움요청 호출 중 등) */
+        @keyframes custom-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-fast {
+            animation: custom-pulse 1.5s infinite;
+        }
+
+        /* 하단 버튼 규격 통일 */
+        .bottom-main-row {
+            display: flex;
+            gap: 0.75rem;
+        }
+        .bottom-main-btn {
+            height: 60px;
+            border-radius: 1rem;
+            font-size: 1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bottom-main-btn-wide {
+            height: 60px;
+            border-radius: 1rem;
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bottom-sub-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.75rem;
+        }
+        .bottom-sub-btn {
+            height: 52px;
+            border-radius: 1rem;
+            font-size: 0.95rem;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    
+
+        /* 모든 기기 대응: 720x1080 태블릿 UI를 화면 가로/세로에 맞춰 온전하게 축소/확대 */
+        html, body {
+            width: 100%;
+            height: 100%;
+            min-height: 100%;
+            margin: 0;
+            overflow: hidden;
+            overscroll-behavior: none;
+        }
+        * { box-sizing: border-box; }
+        .tablet-scale-stage {
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: #e2e8f0;
+            touch-action: manipulation;
+        }
+        @supports (height: 100dvh) {
+            .tablet-scale-stage {
+                height: 100dvh;
+                min-height: 100dvh;
+            }
+        }
+        .tablet-scale-frame {
+            width: 720px;
+            height: 1080px;
+            transform-origin: center center;
+            flex: 0 0 auto;
+            will-change: transform;
+        }
+        #keypad-container,
+        #payment-modal > div,
+        #help-modal > div,
+        #lang-modal > div {
+            max-width: calc(100vw - 24px);
+            max-height: calc(100vh - 24px);
+        }
+        @supports (height: 100dvh) {
+            #keypad-container,
+            #payment-modal > div,
+            #help-modal > div,
+            #lang-modal > div {
+                max-height: calc(100dvh - 24px);
+            }
+        }
+
+    </style>
+</head>
+<body class="bg-slate-200 font-sans select-none overflow-hidden">
+    <div class="tablet-scale-stage">
+
+    <!-- 키오스크 기기 프레임 -->
+    <div class="tablet-scale-frame relative w-[720px] h-[1080px] bg-white rounded-[36px] shadow-2xl border-[14px] border-slate-800 flex flex-col justify-between overflow-hidden">
+        
+        <!-- 상단 스피커 & 센서 영역 디테일 -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-slate-800 rounded-b-3xl z-50 flex items-center justify-center gap-3">
+            <div class="w-3 h-3 bg-slate-600 rounded-full"></div>
+            <div class="w-14 h-1.5 bg-slate-600 rounded-full"></div>
+        </div>
+
+        <!-- 내부 화면 컨테이너 (정확한 슬라이드 비율 유지) -->
+        <div class="flex-1 flex flex-col pt-10 pb-8 px-8 bg-slate-50 relative overflow-hidden">
+            
+            <!-- [상단 헤더 정보 표시부] -->
+            <div id="top-indicator" class="flex items-center justify-between text-sm text-slate-400 font-semibold mb-4 px-1">
+                <span>OO의원 스마트 키오스크</span>
+                <span id="current-time">12:00</span>
+            </div>
+
+            <div id="senior-mode-badge" class="mb-4 px-5 py-3 bg-teal-100 border border-teal-300 rounded-2xl flex items-center justify-between shadow-sm">
+                <div>
+                    <div class="text-lg font-black text-teal-900">👵 시니어 쉬운 이용 모드</div>
+                    <div class="text-sm font-semibold text-teal-700">큰 글씨와 큰 버튼으로 천천히 따라 하시면 됩니다.</div>
+                </div>
+                <button onclick="requestHelp()" class="px-4 py-2.5 bg-white text-teal-800 border border-teal-300 rounded-xl text-sm font-black shadow-sm active:scale-95">
+                    도움
+                </button>
+            </div>
+
+            <!-- [진행 단계 표시바 (Step 1~4) - 슬라이드 2부터 노출] -->
+            <div id="process-bar" class="hidden grid grid-cols-4 gap-1 h-12 mb-5 overflow-hidden rounded-lg bg-white p-1.5 shadow-sm">
+                <div id="step-1" class="step-arrow active flex items-center justify-center text-sm font-bold">서비스선택</div>
+                <div id="step-2" class="step-arrow flex items-center justify-center text-sm font-bold">인적사항/본인확인</div>
+                <div id="step-3" class="step-arrow flex items-center justify-center text-sm font-bold">내역확인</div>
+                <div id="step-4" class="step-arrow flex items-center justify-center text-sm font-bold">완료안내</div>
+            </div>
+
+            <!-- ================= 슬라이드 콘텐츠 컨테이너 ================= -->
+            <div class="flex-1 flex flex-col justify-between">
+
+                <!-- [Slide 1: 시작 화면] -->
+                <div id="slide-1" class="slide-view flex flex-col justify-between h-full pt-2 pb-8">
+                    <div class="text-center mt-3">
+                        <div class="inline-flex items-center gap-2 px-5 py-2.5 bg-teal-100 text-teal-800 rounded-full text-base font-black mb-4">
+                            👵 쉬운 병원 이용 안내
+                        </div>
+                        <h1 class="text-5xl font-extrabold text-slate-800 leading-tight tracking-tight">
+                            무엇을 도와드릴까요?
+                        </h1>
+                        <p class="text-slate-500 text-xl font-semibold mt-3 leading-relaxed">천천히 눌러도 괜찮습니다.<br>원하시는 서비스를 큰 버튼으로 선택하세요.</p>
+                    </div>
+
+                    <!-- 메인 접수 시작 버튼 -->
+                    <div class="flex flex-col gap-5 px-2 mt-6">
+                        <button onclick="goToSlide(2)" class="w-full py-14 bg-teal-300 hover:bg-teal-400 text-slate-900 font-bold text-3xl rounded-3xl shadow-md border-2 border-teal-400 active:scale-[0.98] transition-transform duration-100 flex items-center justify-center gap-3">
+                            <span>접수 / 수납하기</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                        </button>
+                        <button onclick="shortcutToReservation()" class="w-full py-14 bg-white hover:bg-slate-50 text-teal-600 font-bold text-3xl rounded-3xl shadow-md border-2 border-teal-300 active:scale-[0.98] transition-transform duration-100">
+                            예약 확인 / 빠른접수
+                        </button>
+                    </div>
+
+                    <!-- 하단 시스템 음성 및 언어 설정 영역 -->
+                    <div class="flex justify-between items-center px-2 pt-4 mt-5 border-t border-slate-200">
+                        <button onclick="toggleVoiceAlert()" id="voice-btn" class="p-4 bg-white border border-slate-300 rounded-2xl shadow-sm text-slate-700 hover:bg-slate-50 active:scale-95 transition-transform">
+                            <span id="voice-icon" class="text-xl">🔊</span>
+                        </button>
+                        <button onclick="openLanguageModal()" class="px-6 py-3 bg-white border border-slate-300 rounded-2xl shadow-sm text-base font-bold text-slate-700 hover:bg-slate-50 active:scale-95 transition-transform flex items-center gap-2">
+                            🌐 한국어
+                        </button>
+                    </div>
+                </div>
+
+                <!-- [Slide 2: 방문 목적 선택 (4개 항목 완벽 지원)] -->
+                <div id="slide-2" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-2">
+                        <h2 class="text-4xl font-bold text-slate-800 leading-snug">방문 목적을 선택해주세요</h2>
+                        <p class="text-slate-500 text-lg font-semibold mt-2">잘 모르시면 가장 비슷한 항목을 눌러도 되고, 도움이 필요하면 도움 버튼을 눌러주세요.</p>
+                    </div>
+
+                    <div class="flex flex-col gap-4 px-2 my-auto">
+                        <!-- 1. 처음 왔어요 (신규 내원 등록 및 접수) -->
+                        <button onclick="selectPurpose('처음 왔어요')" class="w-full py-6 bg-teal-200 hover:bg-teal-300 text-slate-950 font-black text-3xl rounded-3xl shadow-md border-2 border-teal-400 active:scale-[0.97] transition-all flex items-center justify-center gap-2">
+                            <span>처음 왔어요</span>
+                        </button>
+                        <!-- 2. 수납하러 왔어요 (진료비 계산) -->
+                        <button onclick="selectPurpose('수납하러 왔어요')" class="w-full py-6 bg-white hover:bg-slate-50 text-slate-900 font-bold text-3xl rounded-3xl shadow-md border-2 border-slate-300 active:scale-[0.97] transition-all">
+                            수납하러 왔어요
+                        </button>
+                        <!-- 3. 검사하러 왔어요 (검사실 접수) -->
+                        <button onclick="selectPurpose('검사하러 왔어요')" class="w-full py-6 bg-white hover:bg-slate-50 text-slate-900 font-bold text-3xl rounded-3xl shadow-md border-2 border-slate-300 active:scale-[0.97] transition-all">
+                            검사하러 왔어요
+                        </button>
+                        <!-- 4. 예약하고 왔어요 (진료 예약 내원 접수) -->
+                        <button onclick="selectPurpose('예약하고 왔어요')" class="w-full py-6 bg-white hover:bg-slate-50 text-slate-900 font-bold text-3xl rounded-3xl shadow-md border-2 border-slate-300 active:scale-[0.97] transition-all">
+                            예약하고 왔어요
+                        </button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="bottom-main-row">
+                            <button onclick="goToSlide(1)" class="bottom-main-btn-wide flex-1 bg-slate-200 text-slate-700 shadow hover:bg-slate-300 active:scale-95">이전 단계로</button>
+                        </div>
+                        <div class="bottom-sub-grid">
+                            <button onclick="goToSlide(1)" class="bottom-sub-btn bg-slate-100 text-slate-700 active:scale-95">◀ 이전</button>
+                            <button onclick="resetAndRestart()" class="bottom-sub-btn bg-slate-800 text-white active:scale-95">🏠 처음</button>
+                            <button onclick="requestHelp()" class="bottom-sub-btn bg-red-100 text-red-700 active:scale-95">🙋 도움</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [Slide 3: 진료과목 선택 (처음 왔어요 단계에서만 진입)] -->
+                <div id="slide-3" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-2">
+                        <h2 class="text-4xl font-bold text-slate-800 leading-snug">병원에 오신 이유를 선택하세요</h2>
+                        <p class="text-slate-500 text-lg font-semibold mt-2">원하시는 진료과를 큰 버튼으로 선택해 주세요.</p>
+                    </div>
+
+                    <!-- 진료과 선택 그리드 -->
+                    <div class="grid grid-cols-2 gap-5 my-auto px-1">
+                        <button onclick="selectDepartment('내과')" class="h-40 rounded-3xl bg-teal-300 hover:bg-teal-400 text-slate-900 font-bold text-3xl shadow-md flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+                            <span>내과</span>
+                            <span class="text-xs font-normal text-slate-700">일반 내과 진료</span>
+                        </button>
+                        <button onclick="selectDepartment('이비인후과')" class="h-40 rounded-3xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-3xl shadow-md flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+                            <span>이비인후과</span>
+                            <span class="text-xs font-light text-blue-100">(감기, 콧물, 기침)</span>
+                        </button>
+                        <button onclick="selectDepartment('정형외과')" class="h-40 rounded-3xl bg-blue-400 hover:bg-blue-500 text-white font-bold text-3xl shadow-md flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+                            <span>정형외과</span>
+                            <span class="text-xs font-light text-blue-50">뼈, 물리치료</span>
+                        </button>
+                        <button onclick="selectDepartment('피부과')" class="h-40 rounded-3xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-3xl shadow-md flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+                            <span>피부과</span>
+                            <span class="text-xs font-light text-purple-100">피부질환 및 케어</span>
+                        </button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="bottom-main-row">
+                            <button onclick="goToSlide(2)" class="bottom-main-btn-wide flex-1 bg-slate-200 text-slate-700 shadow hover:bg-slate-300 active:scale-95">이전 단계로</button>
+                        </div>
+                        <div class="bottom-sub-grid">
+                            <button onclick="goToSlide(2)" class="bottom-sub-btn bg-slate-100 text-slate-700 active:scale-95">◀ 이전</button>
+                            <button onclick="resetAndRestart()" class="bottom-sub-btn bg-slate-800 text-white active:scale-95">🏠 처음</button>
+                            <button onclick="requestHelp()" class="bottom-sub-btn bg-red-100 text-red-700 active:scale-95">🙋 도움</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [Slide 7: 검사항목 선택 (검사하러 왔어요 전용)] -->
+                <div id="slide-7" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-2">
+                        <h2 class="text-4xl font-bold text-slate-800 leading-snug">어떤 검사를 받으시나요?</h2>
+                        <p class="text-slate-500 text-lg font-semibold mt-2">안내 받으신 검사 항목을 골라주세요.</p>
+                    </div>
+
+                    <div class="flex flex-col gap-4 px-2 my-auto">
+                        <button onclick="selectExam('혈액/소변 검사')" class="w-full py-5 bg-white hover:bg-teal-50 text-slate-900 font-bold text-2xl rounded-3xl shadow-md border-2 border-slate-300 active:border-teal-400 transition-all">혈액/소변 검사</button>
+                        <button onclick="selectExam('X-Ray / 방사선 검사')" class="w-full py-5 bg-white hover:bg-teal-50 text-slate-900 font-bold text-2xl rounded-3xl shadow-md border-2 border-slate-300 active:border-teal-400 transition-all">X-Ray / 방사선 검사</button>
+                        <button onclick="selectExam('초음파 검사')" class="w-full py-5 bg-white hover:bg-teal-50 text-slate-900 font-bold text-2xl rounded-3xl shadow-md border-2 border-slate-300 active:border-teal-400 transition-all">초음파 검사</button>
+                        <button onclick="selectExam('내시경 검사')" class="w-full py-5 bg-white hover:bg-teal-50 text-slate-900 font-bold text-2xl rounded-3xl shadow-md border-2 border-slate-300 active:border-teal-400 transition-all">내시경 검사</button>
+                        <button onclick="selectExam('기타 특수 검사')" class="w-full py-5 bg-white hover:bg-teal-50 text-slate-900 font-bold text-2xl rounded-3xl shadow-md border-2 border-slate-300 active:border-teal-400 transition-all">기타 특수 검사</button>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="bottom-main-row">
+                            <button onclick="goToSlide(2)" class="bottom-main-btn-wide flex-1 bg-slate-200 text-slate-700 shadow hover:bg-slate-300 active:scale-95">이전 단계로</button>
+                        </div>
+                        <div class="bottom-sub-grid">
+                            <button onclick="goToSlide(2)" class="bottom-sub-btn bg-slate-100 text-slate-700 active:scale-95">◀ 이전</button>
+                            <button onclick="resetAndRestart()" class="bottom-sub-btn bg-slate-800 text-white active:scale-95">🏠 처음</button>
+                            <button onclick="requestHelp()" class="bottom-sub-btn bg-red-100 text-red-700 active:scale-95">🙋 도움</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [Slide 4: 인적사항 입력 / 본인 확인 정보 입력 (공통 단계 - 목적에 따라 명칭 동적 가공)] -->
+                <div id="slide-4" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-2">
+                        <!-- 처음 왔어요/기존 회원 대조에 따라 텍스트 동적 수정 -->
+                        <h2 id="slide4-title" class="text-4xl font-bold text-slate-800 leading-snug">본인확인을 해주세요.</h2>
+                        <p id="slide4-desc" class="text-slate-500 text-lg mt-2 font-semibold">정확한 정보 확인을 위해 큰 입력창을 순서대로 눌러주세요.</p>
+                    </div>
+
+                    <!-- 환자 정보 입력 폼 -->
+                    <div class="space-y-5 my-auto px-1">
+                        <div>
+                            <label class="block text-lg font-bold text-slate-700 mb-2">이름</label>
+                            <input type="text" id="input-name" class="w-full p-4 border-2 border-slate-300 rounded-2xl text-2xl font-bold text-slate-800 bg-white focus:outline-none focus:border-teal-400 cursor-pointer" placeholder="이름을 입력하세요" readonly onclick="openKeypad('name')">
+                        </div>
+
+                        <div>
+                            <label class="block text-lg font-bold text-slate-700 mb-2">주민등록번호</label>
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="input-jumin1" maxlength="6" class="w-[45%] p-4 border-2 border-slate-300 rounded-2xl text-center text-2xl font-bold text-slate-800 bg-white focus:outline-none focus:border-teal-400 cursor-pointer" placeholder="앞 6자리" readonly onclick="openKeypad('jumin1')">
+                                <span class="text-lg font-bold text-slate-400">-</span>
+                                <div class="relative w-[45%]">
+                                    <input type="password" id="input-jumin2" maxlength="7" class="w-full p-3 border-2 border-slate-300 rounded-xl text-center text-lg font-bold text-slate-800 bg-white focus:outline-none focus:border-teal-400 cursor-pointer" placeholder="뒤 7자리" readonly onclick="openKeypad('jumin2')">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- '처음 왔어요' 신규 접수일 때만 주소 필드 활성화 -->
+                        <div id="address-field-container">
+                            <label class="block text-lg font-bold text-slate-700 mb-2">주소</label>
+                            <input type="text" id="input-address" class="w-full p-4 border-2 border-slate-300 rounded-2xl text-xl font-medium text-slate-800 bg-white focus:outline-none focus:border-teal-400 cursor-pointer" placeholder="주소를 선택하세요" readonly onclick="openKeypad('address')">
+                        </div>
+                    </div>
+
+                    <!-- 도움 요청 및 다음 단계 버튼 -->
+                    <div class="space-y-2.5">
+                        <button onclick="requestHelp()" class="w-full py-4 bg-white text-slate-800 border-2 border-slate-800 font-bold rounded-2xl shadow hover:bg-slate-50 active:scale-95 transition-transform text-lg text-center flex items-center justify-center gap-1.5">
+                            <span>🆘 도움이 필요하면 직원을 불러주세요</span>
+                        </button>
+                        <div class="bottom-main-row mt-1">
+                            <button id="slide4-back-btn" onclick="goBackFromSlide4()" class="bottom-main-btn-wide flex-1 bg-slate-200 text-slate-700 shadow hover:bg-slate-300 active:scale-95">이전 단계로</button>
+                            <button onclick="verifyAndNext()" class="bottom-main-btn-wide flex-1 bg-teal-400 text-slate-900 shadow hover:bg-teal-500 active:scale-95">확인 완료</button>
+                        </div>
+                        <div class="bottom-sub-grid">
+                            <button onclick="goBackFromSlide4()" class="bottom-sub-btn bg-slate-100 text-slate-700 active:scale-95">◀ 이전</button>
+                            <button onclick="resetAndRestart()" class="bottom-sub-btn bg-slate-800 text-white active:scale-95">🏠 처음</button>
+                            <button onclick="requestHelp()" class="bottom-sub-btn bg-red-100 text-red-700 active:scale-95">🙋 도움</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [Slide 5: 내역 확인 (방문 사유에 따라 지능적으로 화면 전환)] -->
+                <div id="slide-5" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-2">
+                        <h2 id="slide5-title" class="text-4xl font-bold text-slate-800 leading-snug">내용을 확인해주세요.</h2>
+                        <p id="slide5-subtitle" class="text-slate-500 text-lg mt-2 font-semibold">한 번 더 천천히 확인하신 뒤 진행해 주세요.</p>
+                    </div>
+
+                    <!-- 내역 영역 카드 (동적 변경 가능) -->
+                    <div id="slide5-content-card" class="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm space-y-4 my-auto">
+                        <!-- JS에서 목적별 정보 템플릿 주입 -->
+                    </div>
+
+                    <!-- 하단 분기 버튼군 -->
+                    <div class="space-y-2">
+                        <div class="grid grid-cols-3 gap-3">
+                            <button id="slide5-confirm-btn" onclick="confirmAndFinish()" class="h-[60px] bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-lg rounded-2xl shadow active:scale-95 transition-transform">
+                                맞아요
+                            </button>
+                            <button onclick="resetAndRestart()" class="h-[60px] bg-white hover:bg-red-50 text-red-500 font-bold text-lg rounded-2xl border border-red-300 active:scale-95 transition-transform">
+                                아니요
+                            </button>
+                            <button onclick="requestHelp()" class="h-[60px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-base rounded-2xl border border-slate-300 flex items-center justify-center gap-2">
+                                <span>🆘</span>
+                                <span>도움요청</span>
+                            </button>
+                        </div>
+                        <div class="bottom-main-row">
+                            <button onclick="goToSlide(4)" class="bottom-main-btn-wide flex-1 bg-slate-200 text-slate-700 shadow hover:bg-slate-300 active:scale-95">이전 단계로</button>
+                        </div>
+                        <div class="bottom-sub-grid">
+                            <button onclick="goToSlide(4)" class="bottom-sub-btn bg-slate-100 text-slate-700 active:scale-95">◀ 이전</button>
+                            <button onclick="resetAndRestart()" class="bottom-sub-btn bg-slate-800 text-white active:scale-95">🏠 처음</button>
+                            <button onclick="requestHelp()" class="bottom-sub-btn bg-red-100 text-red-700 active:scale-95">🙋 도움</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- [Slide 6: 결과 완료 화면 (목적별 맞춤 처방전/영수증/접수증 대시보드)] -->
+                <div id="slide-6" class="slide-view hidden flex flex-col justify-between h-full py-5">
+                    <div class="text-center mt-4">
+                        <div class="w-20 h-20 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor" class="w-10 h-10">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                        </div>
+                        <h2 id="slide6-title" class="text-4xl font-black text-slate-800 leading-snug">완료되었습니다.</h2>
+                        <p id="slide6-subtitle" class="text-teal-600 font-semibold text-lg mt-1">안내에 맞춰 이동/대기해 주십시오.</p>
+                    </div>
+
+                    <!-- 결과 전용 영수증 디자인 내부 영역 -->
+                    <div id="slide6-receipt-card" class="bg-white border-2 border-dashed border-slate-300 rounded-3xl p-8 shadow-inner space-y-4 my-auto relative">
+                        <!-- 동적 데이터 수집 영역 -->
+                    </div>
+
+                    <!-- 처음으로 이동 및 타이머 -->
+                    <div class="text-center space-y-2">
+                        <button onclick="resetAndRestart()" class="w-full py-5 bg-teal-300 hover:bg-teal-400 text-slate-900 font-extrabold text-2xl rounded-2xl shadow-md active:scale-95 transition-transform">
+                            확인 (처음으로 돌아가기)
+                        </button>
+                        <p class="text-xs text-slate-400"><span id="timeout-sec" class="font-bold text-teal-600">30</span>초 후 자동으로 처음 화면으로 전환됩니다.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 하단 물리 버튼 디자인 요소 -->
+        <div class="h-12 bg-slate-800 flex items-center justify-center relative">
+            <button onclick="resetAndRestart()" class="w-24 h-4 bg-slate-700 rounded-full hover:bg-slate-600 active:scale-95 transition-transform" title="기기 초기화 버튼"></button>
+        </div>
+    </div>
+
+    <!-- ================= 부가 기능: 가상 키패드 모달 (성함/주민번호/주소 선택 지원) ================= -->
+    <div id="keypad-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-end justify-center pb-8">
+        <div class="bg-white w-[560px] rounded-[32px] p-6 shadow-2xl space-y-5 transform translate-y-full transition-transform duration-300" id="keypad-container">
+            <div class="flex justify-between items-center border-b pb-2">
+                <span id="keypad-title" class="font-bold text-slate-800">입력 창</span>
+                <button onclick="closeKeypad()" class="text-slate-400 hover:text-slate-600 font-bold text-xl">✕</button>
+            </div>
+            
+            <!-- 입력 필드 미리보기 -->
+            <div class="bg-slate-50 p-4 rounded-2xl border flex items-center justify-between">
+                <input type="text" id="keypad-preview" class="bg-transparent border-none text-2xl font-bold w-full text-slate-800 focus:outline-none" readonly>
+                <button onclick="clearKeypad()" class="text-xs text-rose-500 font-bold bg-rose-50 px-2.5 py-1.5 rounded-lg">전체삭제</button>
+            </div>
+
+            <!-- 자판 레이아웃 영역 -->
+            <div id="keypad-area" class="w-full">
+                <!-- 동적 렌더링 -->
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeKeypad()" class="flex-1 py-4 bg-slate-100 text-slate-700 font-bold text-lg rounded-2xl">취소</button>
+                <button onclick="applyKeypadValue()" class="flex-1 py-4 bg-teal-400 text-slate-900 font-bold text-lg rounded-2xl">입력 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 부가 기능: 가상 결제창 모달 (수납하기용) ================= -->
+    <div id="payment-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white w-[460px] p-8 rounded-[32px] shadow-2xl text-center space-y-6">
+            <div class="mx-auto w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 animate-bounce">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-10 h-10">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-3xl font-bold text-slate-800">신용카드 IC칩 삽입</h3>
+                <p class="text-base text-slate-400 mt-2">단말기 아래 투입구에 카드를 끝까지 넣어주세요.</p>
+            </div>
+            
+            <!-- 결제 금액 정보 카드 -->
+            <div class="bg-slate-50 p-5 rounded-3xl border">
+                <div class="flex justify-between text-sm text-slate-400 mb-1">
+                    <span>수납 총액</span>
+                    <span>결제 대상금액</span>
+                </div>
+                <div class="text-4xl font-black text-teal-600" id="payment-modal-price">12,500원</div>
+            </div>
+
+            <!-- 가상 IC 카드 칩 애니메이션 효과 그래픽 -->
+            <div class="w-44 h-28 bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl mx-auto shadow-md relative overflow-hidden flex flex-col justify-between p-3 text-left">
+                <div class="w-8 h-6 bg-yellow-400 rounded-sm"></div>
+                <div class="text-xs text-white tracking-widest font-mono">**** **** **** 5824</div>
+                <div class="absolute -right-6 -bottom-6 w-16 h-16 bg-white/10 rounded-full"></div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closePaymentModal()" class="flex-1 py-4 bg-slate-100 text-slate-700 font-bold rounded-2xl text-base">취소</button>
+                <button onclick="processFakePayment()" class="flex-1 py-4 bg-teal-400 text-slate-900 font-bold rounded-2xl text-base shadow hover:bg-teal-500">결제 승인 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 부가 기능: 도움 요청 알림 모달 ================= -->
+    <div id="help-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white w-[420px] p-7 rounded-[32px] shadow-2xl text-center space-y-5">
+            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto animate-pulse-fast">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-8 h-8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+            </div>
+            <h3 class="text-2xl font-bold text-slate-800">호출 신호 발송 완료</h3>
+            <p class="text-base text-slate-500 leading-relaxed">안내데스크에 직원의 신속 지원이 접수되었습니다.<br><span class="font-bold text-teal-600">조금만 대기하시면 즉시 안내를 도와드리겠습니다.</span></p>
+            <button onclick="closeHelpModal()" class="w-full py-4 bg-slate-900 text-white font-bold text-lg rounded-2xl active:scale-95 transition-transform">
+                확인 (닫기)
+            </button>
+        </div>
+    </div>
+
+    <!-- ================= 부가 기능: 언어 변경 다이얼로그 ================= -->
+    <div id="lang-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white w-[380px] p-6 rounded-[32px] shadow-2xl text-center space-y-5">
+            <h3 class="text-xl font-bold text-slate-800">언어 선택 (Select Language)</h3>
+            <div class="space-y-2">
+                <button onclick="changeLanguage('ko')" class="w-full py-4 bg-teal-50 border-2 border-teal-300 text-teal-700 font-bold text-lg rounded-2xl flex items-center justify-center gap-2">
+                    <span>🇰🇷 한국어</span>
+                    <span class="text-xs text-slate-400">(Selected)</span>
+                </button>
+                <button onclick="changeLanguage('en')" class="w-full py-4 hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-lg rounded-2xl">
+                    🇺🇸 English
+                </button>
+                <button onclick="changeLanguage('zh')" class="w-full py-4 hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-lg rounded-2xl">
+                    🇨🇳 中文 (简体)
+                </button>
+                <button onclick="changeLanguage('ja')" class="w-full py-4 hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-lg rounded-2xl">
+                    🇯🇵 日本語
+                </button>
+            </div>
+            <button onclick="closeLanguageModal()" class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl text-sm">
+                닫기
+            </button>
+        </div>
+    </div>
+
+    </div>
+
+    <script>
+        // 전역 키오스크 핵심 상태
+        const state = {
+            purpose: '',        // '처음 왔어요', '수납하러 왔어요', '검사하러 왔어요', '예약하고 왔어요'
+            department: '',     // 선택된 진료과목 ('내과', '이비인후과', '정형외과', '피부과')
+            examType: '',       // 선택된 검사항목
+            patientName: '',    // 입력된 환자 성함
+            jumin1: '',         // 주민번호 앞자리
+            jumin2: '',         // 주민번호 뒷자리 (마스킹)
+            address: '',        // 신규 접수 주소
+            voiceAlert: true,
+            currentKeypadTarget: null
+        };
+
+        // 실시간 시간 제어
+        function updateTime() {
+            const timeEl = document.getElementById('current-time');
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            timeEl.textContent = `${hours}:${minutes}`;
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        // [방문 목적 쇼트컷 단축키]
+        function shortcutToReservation() {
+            goToSlide(2);
+            selectPurpose('예약하고 왔어요');
+        }
+
+        // 1단계 슬라이드 이동 제어 공통 함수
+        let currentSlide = 1;
+
+        function goToSlide(slideNum) {
+            currentSlide = slideNum;
+            // 모든 슬라이드 일괄 숨김
+            document.querySelectorAll('.slide-view').forEach(slide => {
+                slide.classList.add('hidden');
+            });
+            // 목표 대상 슬라이드 전환 노출
+            document.getElementById(`slide-${slideNum}`).classList.remove('hidden');
+
+            // 상단 진행 단계 정보 게이지 제어
+            const processBar = document.getElementById('process-bar');
+            if (slideNum === 1) {
+                processBar.classList.add('hidden');
+            } else {
+                processBar.classList.remove('hidden');
+                updateProcessIndicator(slideNum);
+            }
+
+            updateSeniorAssistUI(slideNum);
+
+            // 슬라이드 6 자동 타이머 시동 제어
+            if (slideNum === 6) {
+                startTimeoutTimer();
+            } else {
+                stopTimeoutTimer();
+            }
+        }
+
+        function updateSeniorAssistUI(slideNum) {
+            const badge = document.getElementById('senior-mode-badge');
+            if (!badge) return;
+            if (slideNum === 1) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
+        }
+
+        // 진행바 상태 갱신 매퍼
+        function updateProcessIndicator(slideNum) {
+            document.querySelectorAll('.step-arrow').forEach(step => {
+                step.classList.remove('active');
+            });
+
+            // 2단계 글씨를 상황에 따라 다이나믹하게 변경
+            const step2El = document.getElementById('step-2');
+            if (step2El) {
+                if (state.purpose === '처음 왔어요') {
+                    step2El.textContent = "인적사항입력";
+                } else {
+                    step2El.textContent = "본인확인";
+                }
+            }
+
+            if (slideNum === 2 || slideNum === 3 || slideNum === 7) {
+                document.getElementById('step-1').classList.add('active'); // 서비스선택 단계
+            } else if (slideNum === 4) {
+                document.getElementById('step-2').classList.add('active'); // 본인확인 또는 인적사항입력 단계
+            } else if (slideNum === 5) {
+                document.getElementById('step-3').classList.add('active'); // 내역조회 확인 단계
+            } else if (slideNum === 6) {
+                document.getElementById('step-4').classList.add('active'); // 완료 안내 단계
+            }
+        }
+
+        // 4대 목적에 따른 조건 분기 로직 처리기 (핵심)
+        function selectPurpose(purposeText) {
+            state.purpose = purposeText;
+
+            // 목적에 따라 인풋 데이터의 프리셋 가상 제공 (테스트 용의성 강화)
+            if (purposeText === '처음 왔어요') {
+                state.patientName = '';
+                state.jumin1 = '';
+                state.jumin2 = '';
+                state.address = '';
+            } else if (purposeText === '수납하러 왔어요') {
+                state.patientName = '홍길동';
+                state.jumin1 = '640218';
+                state.jumin2 = '1234567';
+                state.department = '내과'; // 진료했던 기록
+            } else if (purposeText === '검사하러 왔어요') {
+                state.patientName = '김검사';
+                state.jumin1 = '800412';
+                state.jumin2 = '1548792';
+                state.department = '이비인후과';
+            } else if (purposeText === '예약하고 왔어요') {
+                state.patientName = '박예약';
+                state.jumin1 = '921105';
+                state.jumin2 = '2015487';
+                state.department = '정형외과';
+            }
+
+            syncInputFields();
+
+            // 다음 슬라이드 이동 경로 제어
+            if (purposeText === '처음 왔어요') {
+                goToSlide(3);
+            } else if (purposeText === '검사하러 왔어요') {
+                // 검사 환자는 '검사항목 선택' 화면으로 이동
+                goToSlide(7);
+            } else {
+                goToSlide(4);
+            }
+        }
+
+        // 검사항목 선택 완료 처리
+        function selectExam(examName) {
+            state.examType = examName;
+            goToSlide(4);
+        }
+
+        // 이전 단계 이동을 위한 스마트 제어기
+        function goBackFromSlide4() {
+            if (state.purpose === '처음 왔어요') {
+                goToSlide(3);
+            } else if (state.purpose === '검사하러 왔어요') {
+                goToSlide(7);
+            } else {
+                goToSlide(2);
+            }
+        }
+
+        // 진료과목 선택 후 액션
+        function selectDepartment(deptName) {
+            state.department = deptName;
+            syncInputFields();
+            goToSlide(4);
+        }
+
+        // 입력 폼과 데이터 객체 동기화 바인딩
+        function syncInputFields() {
+            document.getElementById('input-name').value = state.patientName;
+            document.getElementById('input-jumin1').value = state.jumin1;
+            document.getElementById('input-jumin2').value = state.jumin2 ? '*******' : ''; // 뒤 7자리는 비밀번호 형태
+            document.getElementById('input-address').value = state.address;
+
+            // 제목 요소를 목적에 따라 '인적사항 등록' vs '본인확인'으로 동적 분기
+            const slide4Title = document.getElementById('slide4-title');
+            const slide4Desc = document.getElementById('slide4-desc');
+            const addrContainer = document.getElementById('address-field-container');
+
+            if (state.purpose === '처음 왔어요') {
+                slide4Title.textContent = "인적사항을 입력해주세요.";
+                slide4Desc.textContent = "원내 신규 등록 및 초진 접수를 위해 정보를 입력해 주세요.";
+                addrContainer.classList.remove('hidden');
+            } else {
+                slide4Title.textContent = "본인확인을 해주세요.";
+                slide4Desc.textContent = "가입 기록 및 진료 정보 조회를 위해 인적사항을 확인합니다.";
+                addrContainer.classList.add('hidden');
+            }
+        }
+
+        // 본인확인 정보 입력 완료 검증
+        function verifyAndNext() {
+            const name = document.getElementById('input-name').value;
+            const jumin1 = document.getElementById('input-jumin1').value;
+            const jumin2 = state.jumin2; // 가상 저장값 확인
+
+            if (!name || !jumin1 || !jumin2) {
+                const isNew = state.purpose === '처음 왔어요';
+                alertCustom(isNew ? "정보 등록을 완료하기 위해 모든 입력 칸을 기재해 주세요." : "조회를 완료하기 위해 성함과 주민등록번호를 기재해 주세요.");
+                return;
+            }
+
+            if (state.purpose === '처음 왔어요' && !state.address) {
+                alertCustom("초진 등록을 완료하려면 주소 정보 입력이 추가로 필요합니다.");
+                return;
+            }
+
+            // 슬라이드 5 템플릿 제작 (각 목적의 본질에 최적화된 대화창)
+            const titleEl = document.getElementById('slide5-title');
+            const subtitleEl = document.getElementById('slide5-subtitle');
+            const cardEl = document.getElementById('slide5-content-card');
+            const confirmBtn = document.getElementById('slide5-confirm-btn');
+
+            confirmBtn.textContent = "맞아요"; // 기본값 복구
+
+            if (state.purpose === '처음 왔어요') {
+                titleEl.textContent = "신규 등록 내역을 확인해 주세요.";
+                subtitleEl.textContent = "아래 인적사항 및 진료 정보로 초진 접수를 시작합니다.";
+                cardEl.innerHTML = `
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">구분</span>
+                        <span class="font-extrabold text-teal-600">초진 신규 등록</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">환자명</span>
+                        <span class="font-bold text-slate-800">${state.patientName}</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">선택 진료과</span>
+                        <span class="font-bold text-slate-800">${state.department || '내과'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">등록 주소</span>
+                        <span class="font-medium text-slate-600 text-right text-xs truncate max-w-[200px]">${state.address}</span>
+                    </div>
+                `;
+            } else if (state.purpose === '수납하러 왔어요') {
+                titleEl.textContent = "당일 진료 수납 명세를 확인하세요.";
+                subtitleEl.textContent = "처방전 및 수납 내역이 자동 매칭되었습니다.";
+                confirmBtn.textContent = "카드결제";
+                cardEl.innerHTML = `
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">성함</span>
+                        <span class="font-bold text-slate-800">${state.patientName} 님</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">최종 수납처</span>
+                        <span class="font-bold text-slate-800">${state.department || '내과'}</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">본인 부담 진료비</span>
+                        <span class="font-bold text-slate-800">4,200원</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">약제비 및 처방료</span>
+                        <span class="font-bold text-slate-800">8,300원</span>
+                    </div>
+                    <div class="flex justify-between pt-1 text-teal-600 font-extrabold text-lg">
+                        <span>최종 결제 금액</span>
+                        <span>12,500원</span>
+                    </div>
+                `;
+            } else if (state.purpose === '검사하러 왔어요') {
+                titleEl.textContent = "검사 대기 접수를 확인해 주세요.";
+                subtitleEl.textContent = "오늘 검사 예약이 완료된 항목 안내입니다.";
+                cardEl.innerHTML = `
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">검사 대상자</span>
+                        <span class="font-bold text-slate-800">${state.patientName} 님</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">의뢰 진료과</span>
+                        <span class="font-bold text-slate-800">${state.department || '이비인후과'}</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">검사 내용</span>
+                        <span class="font-bold text-blue-600">${state.examType || '기본 검사'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">대기실 위치</span>
+                        <span class="font-medium text-slate-800">본관 2층 일반검사실</span>
+                    </div>
+                `;
+            } else if (state.purpose === '예약하고 왔어요') {
+                titleEl.textContent = "예약 내용을 최종 대조하세요.";
+                subtitleEl.textContent = "원내 데이터베이스에 조회된 실시간 예약건입니다.";
+                cardEl.innerHTML = `
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">내원자 성함</span>
+                        <span class="font-bold text-slate-800">${state.patientName} 님</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">담당의사</span>
+                        <span class="font-bold text-slate-800">홍길동 원장 (진료 1과)</span>
+                    </div>
+                    <div class="flex justify-between border-b pb-2">
+                        <span class="text-slate-400">진료 예정 과목</span>
+                        <span class="font-extrabold text-blue-600">${state.department || '정형외과'}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">진료 예정 시간</span>
+                        <span class="font-bold text-slate-800">15:00 ~ 15:15</span>
+                    </div>
+                `;
+            }
+
+            goToSlide(5);
+        }
+
+        // '맞아요' 수락 완료 처리기 (카드 결제는 중단 결제 팝업 노출)
+        function confirmAndFinish() {
+            if (state.purpose === '수납하러 왔어요') {
+                document.getElementById('payment-modal-price').textContent = "12,500원";
+                openPaymentModal();
+            } else {
+                goToSlide(6);
+            }
+        }
+
+        // 수납 전용 결제 완료 처리
+        function processFakePayment() {
+            closePaymentModal();
+            goToSlide(6);
+        }
+
+        // 결제창 모달 온오프
+        function openPaymentModal() {
+            document.getElementById('payment-modal').classList.remove('hidden');
+        }
+        function closePaymentModal() {
+            document.getElementById('payment-modal').classList.add('hidden');
+        }
+
+        // 최종 6단계 수납증 및 처방전 발급 분기처리 기믹
+        function startTimeoutTimer() {
+            stopTimeoutTimer();
+            
+            // 6페이지 동적 성과 기록 가시화
+            const receiptEl = document.getElementById('slide6-receipt-card');
+            const titleEl = document.getElementById('slide6-title');
+            const subtitleEl = document.getElementById('slide6-subtitle');
+
+            const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+            const tempNum = Math.floor(Math.random() * 80) + 10;
+
+            if (state.purpose === '처음 왔어요') {
+                titleEl.textContent = "초진 등록 및 접수 완료";
+                subtitleEl.textContent = "원내 고유 대기 순번표가 출력되었습니다.";
+                receiptEl.innerHTML = `
+                    <div class="text-center border-b pb-3">
+                        <span class="text-xs text-slate-400 block">${dateStr} 초진 접수증</span>
+                        <span class="text-4xl font-black text-teal-600">0${tempNum}번</span>
+                    </div>
+                    <div class="space-y-2 text-xs pt-1.5">
+                        <div class="flex justify-between"><span>성명</span><span class="font-bold text-slate-800">${state.patientName}</span></div>
+                        <div class="flex justify-between"><span>진료과</span><span class="font-bold text-teal-600">${state.department || '내과'}</span></div>
+                        <div class="flex justify-between"><span>안내장소</span><span class="font-bold text-slate-800">2층 접수창구 앞 대기실</span></div>
+                        <div class="flex justify-between text-rose-500 pt-2 border-t font-bold"><span>예상 대기 인원</span><span>3명 (약 15분 소요)</span></div>
+                    </div>
+                `;
+            } else if (state.purpose === '수납하러 왔어요') {
+                titleEl.textContent = "수납 및 약국 처방전 발급 완료";
+                subtitleEl.textContent = "카드 결제 승인이 완료되었습니다. 카드를 꼭 챙겨주세요.";
+                receiptEl.innerHTML = `
+                    <div class="text-center border-b pb-3">
+                        <span class="text-xs text-slate-400 block">${dateStr} 카드영수증 / 처방전</span>
+                        <span class="text-4xl font-black text-blue-600">수납완료</span>
+                    </div>
+                    <div class="space-y-2 text-xs pt-1.5">
+                        <div class="flex justify-between"><span>수납자</span><span class="font-bold text-slate-800">${state.patientName}</span></div>
+                        <div class="flex justify-between"><span>처방전 번호</span><span class="font-bold text-indigo-600">P-0145892</span></div>
+                        <div class="flex justify-between"><span>결제카드</span><span class="font-bold text-slate-800">국민체크 (일시불)</span></div>
+                        <div class="flex justify-between text-emerald-600 pt-2 border-t font-bold"><span>결제 완료금액</span><span>12,500원</span></div>
+                    </div>
+                    <div class="text-center text-xs bg-teal-50 text-teal-700 py-1.5 rounded-lg font-bold mt-1">※ 처방전을 약국에 제출하여 약을 수령해 주세요.</div>
+                `;
+            } else if (state.purpose === '검사하러 왔어요') {
+                titleEl.textContent = "검사실 예약 접수 완료";
+                subtitleEl.textContent = "대기 번호표 순서에 맞춰 검사실로 이동해 주십시오.";
+                receiptEl.innerHTML = `
+                    <div class="text-center border-b pb-3">
+                        <span class="text-xs text-slate-400 block">${dateStr} 검사실 입실 대기표</span>
+                        <span class="text-4xl font-black text-rose-600">0${tempNum}번</span>
+                    </div>
+                    <div class="space-y-2 text-xs pt-1.5">
+                        <div class="flex justify-between"><span>환자명</span><span class="font-bold text-slate-800">${state.patientName}</span></div>
+                        <div class="flex justify-between"><span>의뢰검사</span><span class="font-bold text-slate-800">${state.examType || '기본 검사'}</span></div>
+                        <div class="flex justify-between"><span>안내장소</span><span class="font-extrabold text-rose-500">지하 1층 제1검사실</span></div>
+                        <div class="flex justify-between text-slate-500 pt-2 border-t"><span>현재 대기자 수</span><span>1명</span></div>
+                    </div>
+                `;
+            } else if (state.purpose === '예약하고 왔어요') {
+                titleEl.textContent = "진료 내원 확인 완료";
+                subtitleEl.textContent = "예약 내역 검증이 끝났습니다. 해당 진료실 앞으로 이동하세요.";
+                receiptEl.innerHTML = `
+                    <div class="text-center border-b pb-3">
+                        <span class="text-xs text-slate-400 block">${dateStr} 진료 대기 순서표</span>
+                        <span class="text-4xl font-black text-indigo-600">0${tempNum}번</span>
+                    </div>
+                    <div class="space-y-2 text-xs pt-1.5">
+                        <div class="flex justify-between"><span>환자명</span><span class="font-bold text-slate-800">${state.patientName}</span></div>
+                        <div class="flex justify-between"><span>예약시간</span><span class="font-bold text-slate-800">15:00</span></div>
+                        <div class="flex justify-between"><span>이동진료과</span><span class="font-extrabold text-teal-600">${state.department || '정형외과'} (진료 1과)</span></div>
+                        <div class="flex justify-between text-rose-500 pt-2 border-t font-bold"><span>진료 대기예상</span><span>바로 입장 대기</span></div>
+                    </div>
+                `;
+            }
+
+            // 자동 처음 복귀 타이머 구동
+            let limitSec = 30;
+            const indicator = document.getElementById('timeout-sec');
+            indicator.textContent = limitSec;
+
+            autoResetTimer = setInterval(() => {
+                limitSec--;
+                indicator.textContent = limitSec;
+                if(limitSec <= 0) {
+                    clearInterval(autoResetTimer);
+                    resetAndRestart();
+                }
+            }, 1000);
+        }
+
+        // 복귀 방지 타이머 정지
+        let autoResetTimer = null;
+        function stopTimeoutTimer() {
+            if(autoResetTimer) {
+                clearInterval(autoResetTimer);
+                autoResetTimer = null;
+            }
+        }
+
+        // ================= 가상 키패드 입력 시스템 제어 로직 =================
+        function openKeypad(targetField) {
+            state.currentKeypadTarget = targetField;
+            const modal = document.getElementById('keypad-modal');
+            const container = document.getElementById('keypad-container');
+            const previewInput = document.getElementById('keypad-preview');
+            const keypadArea = document.getElementById('keypad-area');
+            const title = document.getElementById('keypad-title');
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                container.classList.remove('translate-y-full');
+            }, 50);
+
+            if (targetField === 'name' || targetField === 'address') {
+                title.textContent = state.purpose === '처음 왔어요' ? (targetField === 'name' ? "등록할 성함 입력" : "등록할 주소 입력") : "확인할 성함 입력";
+                previewInput.value = targetField === 'name' ? state.patientName : state.address;
+                
+                // 빠른 입력을 돕기 위한 상단 매크로 + QWERTY 레이아웃 세팅
+                const macros = targetField === 'name' ? ["홍길동", "박예약", "김검사"] : ["안산시 상록구", "수원시 팔달구", "서울 강남구"];
+                let html = `<div class="flex gap-1.5 mb-3">`;
+                macros.forEach(m => {
+                    html += `<button onclick="onKeyPress('${m}')" class="flex-1 py-2 bg-teal-50 border border-teal-200 text-teal-800 text-sm font-bold rounded-lg shadow-sm active:scale-95 transition-all">${m}</button>`;
+                });
+                html += `</div>`;
+
+                // QWERTY 자음/모음
+                const row1 = ['ㅂ','ㅈ','ㄷ','ㄱ','ㅅ','ㅛ','ㅕ','ㅑ','ㅐ','ㅔ'];
+                const row2 = ['ㅁ','ㄴ','ㅇ','ㄹ','ㅎ','ㅗ','ㅓ','ㅏ','ㅣ'];
+                const row3 = ['ㅋ','ㅌ','ㅊ','ㅍ','ㅠ','ㅜ','ㅡ'];
+                
+                const renderRow = (keys) => `<div class="flex justify-center gap-1 mb-1.5">` + keys.map(k => `<button onclick="onKeyPress('${k}')" class="w-[34px] h-[46px] bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-lg shadow-sm active:scale-90 transition-all text-sm">${k}</button>`).join('') + `</div>`;
+
+                html += renderRow(row1);
+                html += renderRow(row2);
+                html += renderRow(row3);
+                
+                // 특수 키 (스페이스, 지우기)
+                html += `<div class="flex justify-center gap-1 mt-2">
+                    <button onclick="onKeyPress('Space')" class="w-[60%] h-[46px] bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg shadow-sm active:scale-90 transition-all text-sm">띄어쓰기</button>
+                    <button onclick="onKeyPress('Back')" class="w-[30%] h-[46px] bg-rose-100 hover:bg-rose-200 text-rose-600 font-bold rounded-lg shadow-sm active:scale-90 transition-all text-sm flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9.75L14.25 12m0 0l2.25 2.25M14.25 12l2.25-2.25M14.25 12L12 14.25m-2.58 4.92l-6.375-6.375a1.125 1.125 0 010-1.59L9.42 4.83c.211-.211.498-.33.796-.33H19.5a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-9.284c-.298 0-.585-.119-.796-.33z" /></svg>
+                    </button>
+                </div>`;
+                keypadArea.innerHTML = html;
+
+            } else {
+                // 숫자 패드 레이아웃
+                title.textContent = targetField === 'jumin1' ? "주민번호 앞 6자리" : "주민번호 뒤 7자리";
+                previewInput.value = targetField === 'jumin1' ? state.jumin1 : state.jumin2;
+                
+                const numKeys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Clear", "0", "Back"];
+                let html = `<div class="grid grid-cols-3 gap-2 text-lg font-bold">`;
+                numKeys.forEach(k => {
+                    const bg = k === 'Back' ? 'bg-rose-100 text-rose-600' : (k === 'Clear' ? 'bg-slate-200 text-slate-600' : 'bg-slate-100 text-slate-800');
+                    const text = k === 'Back' ? '지우기' : (k === 'Clear' ? '초기화' : k);
+                    html += `<button onclick="onKeyPress('${k}')" class="py-4 ${bg} hover:bg-opacity-80 font-bold rounded-xl active:scale-90 transition-all">${text}</button>`;
+                });
+                html += `</div>`;
+                keypadArea.innerHTML = html;
+            }
+        }
+
+        function onKeyPress(key) {
+            const preview = document.getElementById('keypad-preview');
+            const maxLen = (state.currentKeypadTarget === 'jumin1') ? 6 : (state.currentKeypadTarget === 'jumin2') ? 7 : 30;
+
+            if (key === 'Clear') {
+                preview.value = '';
+            } else if (key === 'Back') {
+                // 한글 조합이 되어있을 경우 분해해서 마지막 자소 제거 후 재조립 (hangul-js 라이브러리 활용)
+                if(window.Hangul && (state.currentKeypadTarget === 'name' || state.currentKeypadTarget === 'address')) {
+                    if (preview.value.length > 0) {
+                        const disassembled = Hangul.disassemble(preview.value);
+                        disassembled.pop();
+                        preview.value = Hangul.assemble(disassembled);
+                    }
+                } else {
+                    preview.value = preview.value.slice(0, -1);
+                }
+            } else if (key === 'Space') {
+                if (preview.value.length < maxLen) preview.value += ' ';
+            } else if (key.length > 1) { // : 매크로 문자열 통째로 입력
+                preview.value = key;
+            } else {
+                if (preview.value.length < maxLen) {
+                    // 한글 자음/모음이 입력되면 hangul-js로 실시간 조합
+                    if(window.Hangul && (state.currentKeypadTarget === 'name' || state.currentKeypadTarget === 'address')) {
+                        const disassembled = Hangul.disassemble(preview.value);
+                        disassembled.push(key);
+                        preview.value = Hangul.assemble(disassembled);
+                    } else {
+                        preview.value += key;
+                    }
+                }
+            }
+        }
+
+        function clearKeypad() {
+            document.getElementById('keypad-preview').value = '';
+        }
+
+        // 키패드 모달 닫기
+        function closeKeypad() {
+            const container = document.getElementById('keypad-container');
+            container.classList.add('translate-y-full');
+            setTimeout(() => {
+                document.getElementById('keypad-modal').classList.add('hidden');
+            }, 300);
+        }
+
+        function applyKeypadValue() {
+            const val = document.getElementById('keypad-preview').value;
+            if (state.currentKeypadTarget === 'name') {
+                state.patientName = val;
+            } else if (state.currentKeypadTarget === 'jumin1') {
+                state.jumin1 = val;
+            } else if (state.currentKeypadTarget === 'jumin2') {
+                state.jumin2 = val;
+            } else if (state.currentKeypadTarget === 'address') {
+                state.address = val;
+            }
+            syncInputFields();
+            closeKeypad();
+        }
+
+        // ================= 도움 요청 알림 =================
+        function requestHelp() {
+            document.getElementById('help-modal').classList.remove('hidden');
+            if(state.voiceAlert && window.speechSynthesis) {
+                const speak = new SpeechSynthesisUtterance("도움 요청 신호가 접수되었습니다. 잠시만 대기해 주세요.");
+                speak.lang = "ko-KR";
+                window.speechSynthesis.speak(speak);
+            }
+        }
+        function closeHelpModal() {
+            document.getElementById('help-modal').classList.add('hidden');
+        }
+
+        // ================= 소리 알림 옵션 토글 =================
+        function toggleVoiceAlert() {
+            state.voiceAlert = !state.voiceAlert;
+            const btn = document.getElementById('voice-btn');
+            const icon = document.getElementById('voice-icon');
+            if (state.voiceAlert) {
+                icon.textContent = "🔊";
+                btn.className = "p-4 bg-white border border-slate-300 rounded-2xl shadow-sm text-slate-700 hover:bg-slate-50";
+            } else {
+                icon.textContent = "🔇";
+                btn.className = "p-4 bg-rose-50 border border-rose-300 rounded-2xl shadow-sm text-rose-600";
+            }
+        }
+
+        // ================= 다국어 관리 =================
+        function openLanguageModal() {
+            document.getElementById('lang-modal').classList.remove('hidden');
+        }
+        function closeLanguageModal() {
+            document.getElementById('lang-modal').classList.add('hidden');
+        }
+        function changeLanguage(langCode) {
+            if(langCode !== 'ko') {
+                alertCustom("선택하신 언어팩 준비 중입니다. 임시로 국문 버전을 제공합니다.");
+            }
+            closeLanguageModal();
+        }
+
+        // ================= 시스템 초기화 및 복구 =================
+        function resetAndRestart() {
+            stopTimeoutTimer();
+            state.purpose = '';
+            state.department = '내과';
+            state.patientName = '';
+            state.jumin1 = '';
+            state.jumin2 = '';
+            state.address = '';
+            syncInputFields();
+            goToSlide(1);
+        }
+
+        function alertCustom(message) {
+            alert(message);
+        }
+
+
+        // 720x1080 기준 태블릿 UI를 현재 기기 화면 안에 완전히 맞춥니다.
+        function fitTabletFrame() {
+            const frame = document.querySelector('.tablet-scale-frame');
+            if (!frame) return;
+
+            const designWidth = 720;
+            const designHeight = 1080;
+            const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+            const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            const padding = Math.min(12, Math.max(4, Math.min(viewportWidth, viewportHeight) * 0.015));
+            const scale = Math.min((viewportWidth - padding) / designWidth, (viewportHeight - padding) / designHeight);
+
+            frame.style.transform = `scale(${Math.max(0.1, scale)})`;
+        }
+
+        window.addEventListener('load', fitTabletFrame);
+        window.addEventListener('resize', fitTabletFrame);
+        window.addEventListener('orientationchange', () => setTimeout(fitTabletFrame, 120));
+        document.addEventListener('DOMContentLoaded', fitTabletFrame);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', fitTabletFrame);
+            window.visualViewport.addEventListener('scroll', fitTabletFrame);
+        }
+        fitTabletFrame();
+
+    </script>
+</body>
+</html>

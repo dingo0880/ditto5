@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>디토 키오스크 선택</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* 모든 기기 대응: 720x1080 태블릿 UI를 화면 가로/세로에 맞춰 온전하게 축소/확대 */
+    html, body {
+      width: 100%;
+      height: 100%;
+      min-height: 100%;
+      margin: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+    * { box-sizing: border-box; }
+    .tablet-scale-stage {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #e2e8f0;
+      touch-action: manipulation;
+    }
+    @supports (height: 100dvh) {
+      .tablet-scale-stage {
+        height: 100dvh;
+        min-height: 100dvh;
+      }
+    }
+    .tablet-scale-frame {
+      width: 720px;
+      height: 1080px;
+      transform-origin: center center;
+      flex: 0 0 auto;
+      will-change: transform;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-200 font-sans select-none overflow-hidden">
+  <div class="tablet-scale-stage">
+
+    <!-- 카페/병원 키오스크와 동일한 세로 태블릿 프레임 -->
+    <div class="tablet-scale-frame relative w-[720px] h-[1080px] bg-white rounded-[36px] shadow-2xl border-[14px] border-slate-800 flex flex-col justify-between overflow-hidden">
+
+      <!-- 상단 태블릿 카메라/센서 영역 -->
+      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-slate-800 rounded-b-3xl z-50 flex items-center justify-center gap-3">
+        <div class="w-3 h-3 bg-slate-600 rounded-full"></div>
+        <div class="w-14 h-1.5 bg-slate-600 rounded-full"></div>
+      </div>
+
+      <!-- 내부 화면 -->
+      <div class="flex-1 bg-slate-50 px-10 pt-16 pb-10 flex flex-col">
+
+        <!-- 제목 영역 -->
+        <div class="text-center mt-2">
+          <h1 class="text-5xl font-black text-slate-900 leading-tight tracking-tight">
+            어떤 키오스크를<br>
+            시연하시겠습니까?
+          </h1>
+          <p class="text-xl text-slate-500 font-bold mt-8">
+            아래 두 가지 데모 중 하나를 선택해 주세요.
+          </p>
+        </div>
+
+        <!-- 선택 카드 영역 -->
+        <div class="flex flex-col gap-8 mt-16">
+
+          <!-- 병원 키오스크 -->
+          <a href="./hospital.html"
+             class="w-full bg-white border-2 border-teal-300 rounded-[30px] shadow-md p-8 flex items-center gap-7 active:scale-[0.98] transition-transform">
+            <div class="w-24 h-24 bg-teal-100 rounded-[24px] flex items-center justify-center text-6xl shrink-0">
+              🏥
+            </div>
+
+            <div class="flex-1">
+              <h2 class="text-3xl font-black text-slate-900 tracking-tight">
+                디토: 병원 키오스크
+              </h2>
+              <p class="text-lg text-slate-500 font-bold leading-relaxed mt-3">
+                접수, 수납, 검사, 예약 확인을 큰 버튼과 단<br>
+                계별 안내로 진행합니다.
+              </p>
+            </div>
+
+            <div class="text-4xl font-black text-teal-600 pr-2">
+              →
+            </div>
+          </a>
+
+          <!-- 카페 키오스크 -->
+          <a href="./cafe.html"
+             class="w-full bg-white border-2 border-emerald-300 rounded-[30px] shadow-md p-8 flex items-center gap-7 active:scale-[0.98] transition-transform">
+            <div class="w-24 h-24 bg-emerald-100 rounded-[24px] flex items-center justify-center text-6xl shrink-0">
+              ☕
+            </div>
+
+            <div class="flex-1">
+              <h2 class="text-3xl font-black text-slate-900 tracking-tight">
+                디토: 카페 키오스크
+              </h2>
+              <p class="text-lg text-slate-500 font-bold leading-relaxed mt-3">
+                메뉴 선택, 옵션 선택, 결제, 적립, 대기번호<br>
+                안내까지 쉽게 진행합니다.
+              </p>
+            </div>
+
+            <div class="text-4xl font-black text-emerald-600 pr-2">
+              →
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+      <!-- 하단 태블릿 홈 바 -->
+      <div class="h-12 bg-slate-800 flex items-center justify-center relative z-50">
+        <div class="w-24 h-4 bg-slate-700 rounded-full"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // 720x1080 기준 태블릿 UI를 현재 기기 화면 안에 완전히 맞춥니다.
+    function fitTabletFrame() {
+      const frame = document.querySelector('.tablet-scale-frame');
+      if (!frame) return;
+
+      const designWidth = 720;
+      const designHeight = 1080;
+      const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+      const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const padding = Math.min(12, Math.max(4, Math.min(viewportWidth, viewportHeight) * 0.015));
+      const scale = Math.min((viewportWidth - padding) / designWidth, (viewportHeight - padding) / designHeight);
+
+      frame.style.transform = `scale(${Math.max(0.1, scale)})`;
+    }
+
+    window.addEventListener('load', fitTabletFrame);
+    window.addEventListener('resize', fitTabletFrame);
+    window.addEventListener('orientationchange', () => setTimeout(fitTabletFrame, 120));
+    document.addEventListener('DOMContentLoaded', fitTabletFrame);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', fitTabletFrame);
+      window.visualViewport.addEventListener('scroll', fitTabletFrame);
+    }
+    fitTabletFrame();
+  </script>
+</body>
+</html>
